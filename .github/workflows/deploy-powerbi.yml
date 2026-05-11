@@ -1,0 +1,54 @@
+name: Deploy Power BI Dashboards
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "dashboards/**/*.pbix"
+
+  workflow_dispatch:
+    inputs:
+      dashboard:
+        description: "Nome do arquivo .pbix (ex: vendas.pbix). Deixe vazio para publicar todos."
+        required: false
+        default: ""
+
+jobs:
+  deploy:
+    name: Publicar dashboards no Orgão2
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Instalar dependências
+        run: pip install -r scripts/requirements.txt
+
+      - name: Determinar dashboards alterados
+        id: changed
+        run: |
+          if [ -n "${{ github.event.inputs.dashboard }}" ]; then
+            echo "files=dashboards/${{ github.event.inputs.dashboard }}" >> "$GITHUB_OUTPUT"
+          else
+            FILES=$(git diff --name-only HEAD~1 HEAD -- 'dashboards/*.pbix' | tr '\n' ' ')
+            echo "files=$FILES" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publicar no Power BI (Orgão2)
+        env:
+          PBI_TENANT_ID: ${{ secrets.PBI_TENANT_ID }}
+          PBI_CLIENT_ID: ${{ secrets.PBI_CLIENT_ID }}
+          PBI_CLIENT_SECRET: ${{ secrets.PBI_CLIENT_SECRET }}
+          PBI_WORKSPACE_ID: ${{ secrets.PBI_WORKSPACE_ID }}
+        run: |
+          python scripts/deploy_powerbi.py ${{ steps.changed.outputs.files }}
