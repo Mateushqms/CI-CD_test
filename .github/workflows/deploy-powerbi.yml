@@ -17,7 +17,7 @@ on:
 jobs:
   deploy:
     name: Publicar dashboards no Power BI
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
 
     steps:
       - name: Checkout do repositório
@@ -27,13 +27,14 @@ jobs:
 
       - name: Determinar dashboards alterados
         id: changed
+        shell: pwsh
         run: |
-          if [ -n "${{ github.event.inputs.dashboard }}" ]; then
-            echo "files=dashboards/${{ github.event.inputs.dashboard }}" >> "$GITHUB_OUTPUT"
-          else
-            FILES=$(git diff --name-only HEAD~1 HEAD -- 'dashboards/*.pbix' | tr '\n' ' ')
-            echo "files=$FILES" >> "$GITHUB_OUTPUT"
-          fi
+          if ("${{ github.event.inputs.dashboard }}" -ne "") {
+            "files=dashboards/${{ github.event.inputs.dashboard }}" >> $env:GITHUB_OUTPUT
+          } else {
+            $files = git diff --name-only HEAD~1 HEAD -- 'dashboards/*.pbix' | Where-Object { $_ -match "\.pbix$" }
+            "files=$($files -join ' ')" >> $env:GITHUB_OUTPUT
+          }
 
       - name: Publicar via PowerShell
         shell: pwsh
