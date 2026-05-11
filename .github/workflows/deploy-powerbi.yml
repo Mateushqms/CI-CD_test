@@ -17,7 +17,7 @@ on:
 jobs:
   deploy:
     name: Publicar dashboards no Power BI
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout do repositório
@@ -25,62 +25,30 @@ jobs:
         with:
           fetch-depth: 2
 
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Instalar dependências
+        run: pip install -r scripts/requirements.txt
+
       - name: Determinar dashboards alterados
         id: changed
-        shell: pwsh
         run: |
-          if ("${{ github.event.inputs.dashboard }}" -ne "") {
-            "files=dashboards/${{ github.event.inputs.dashboard }}" >> $env:GITHUB_OUTPUT
-          } else {
-            $files = git diff --name-only HEAD~1 HEAD -- 'dashboards/*.pbix' | Where-Object { $_ -match "\.pbix$" }
-            "files=$($files -join ' ')" >> $env:GITHUB_OUTPUT
-          }
+          if [ -n "${{ github.event.inputs.dashboard }}" ]; then
+            echo "files=dashboards/${{ github.event.inputs.dashboard }}" >> "$GITHUB_OUTPUT"
+          else
+            FILES=$(git diff --name-only HEAD~1 HEAD -- 'dashboards/*.pbix' | tr '\n' ' ')
+            echo "files=$FILES" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Publicar via PowerShell
-        shell: pwsh
+      - name: Publicar no Power BI
         env:
-          PBI_USER: ${{ secrets.PBI_USER }}
-          PBI_PASSWORD: ${{ secrets.PBI_PASSWORD }}
+          PBI_TENANT_ID: ${{ secrets.PBI_TENANT_ID }}
+          PBI_CLIENT_ID: ${{ secrets.PBI_CLIENT_ID }}
+          PBI_CLIENT_SECRET: ${{ secrets.PBI_CLIENT_SECRET }}
           PBI_WORKSPACE_ID: ${{ secrets.PBI_WORKSPACE_ID }}
         run: |
-          Install-Module -Name MicrosoftPowerBIMgmt -Scope CurrentUser -Force -AllowClobber -ErrorAction Stop
-
-          $pass = ConvertTo-SecureString $env:PBI_PASSWORD -AsPlainText -Force
-          $cred = New-Object System.Management.Automation.PSCredential($env:PBI_USER, $pass)
-          Connect-PowerBIServiceAccount -Credential $cred
-
-          $rawFiles = "${{ steps.changed.outputs.files }}"
-          $files = $rawFiles.Trim() -split "\s+" | Where-Object { $_ -match "\.pbix$" }
-
-          if ($files.Count -eq 0) {
-            Write-Host "Nenhum arquivo .pbix encontrado. Nada a publicar."
-            exit 0
-          }
-
-          $errors = @()
-          foreach ($file in $files) {
-            if (-not (Test-Path $file)) {
-              Write-Host "Arquivo nao encontrado, pulando: $file"
-              continue
-            }
-            $name = [System.IO.Path]::GetFileNameWithoutExtension($file)
-            try {
-              if ([string]::IsNullOrWhiteSpace($env:PBI_WORKSPACE_ID)) {
-                # Publica no My Workspace quando ID não for informado
-                Write-Host "Publicando: $file -> My Workspace"
-                New-PowerBIReport -Path $file -Name $name -ConflictAction CreateOrOverwrite
-              } else {
-                Write-Host "Publicando: $file -> workspace $env:PBI_WORKSPACE_ID"
-                New-PowerBIReport -Path $file -WorkspaceId $env:PBI_WORKSPACE_ID -Name $name -ConflictAction CreateOrOverwrite
-              }
-              Write-Host "Publicado com sucesso: $name"
-            } catch {
-              Write-Host "ERRO ao publicar $name`: $_"
-              $errors += $file
-            }
-          }
-
-          if ($errors.Count -gt 0) {
-            Write-Host "Falha em $($errors.Count) arquivo(s): $($errors -join ', ')"
-            exit 1
-          }
+          python scripts/deploy_powerbi.py ${{ steps.changed.outputs.files }}
