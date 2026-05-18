@@ -1,0 +1,56 @@
+# name: Deploy .pbit ao SharePoint
+
+# on:
+#   push:
+#     branches:
+#       - main
+#     paths:
+#       - "CI_CD_PBIT/dashboards/**/*.pbit"
+
+#   workflow_dispatch:
+#     inputs:
+#       dashboard:
+#         description: "Nome do arquivo .pbit (ex: vendas.pbit). Vazio = publica todos os alterados."
+#         required: false
+#         default: ""
+
+# jobs:
+#   deploy:
+#     name: Enviar .pbit ao SharePoint do Órgão 2
+#     runs-on: ubuntu-latest
+
+#     steps:
+#       - name: Checkout do repositório
+#         uses: actions/checkout@v4
+#         with:
+#           fetch-depth: 2
+
+#       - name: Configurar Python
+#         uses: actions/setup-python@v5
+#         with:
+#           python-version: "3.12"
+#           cache: "pip"
+
+#       - name: Instalar dependências
+#         run: pip install -r CI_CD_PBIT/scripts/requirements.txt
+
+#       - name: Determinar dashboards alterados
+#         id: changed
+#         run: |
+#           if [ -n "${{ github.event.inputs.dashboard }}" ]; then
+#             echo "files=CI_CD_PBIT/dashboards/${{ github.event.inputs.dashboard }}" >> "$GITHUB_OUTPUT"
+#           else
+#             FILES=$(git diff --name-only HEAD~1 HEAD -- 'CI_CD_PBIT/dashboards/*.pbit' | tr '\n' ' ')
+#             echo "files=$FILES" >> "$GITHUB_OUTPUT"
+#           fi
+
+#       - name: Enviar ao SharePoint
+#         env:
+#           SP_TENANT_ID: ${{ secrets.SP_TENANT_ID }}
+#           SP_CLIENT_ID: ${{ secrets.SP_CLIENT_ID }}
+#           SP_CLIENT_SECRET: ${{ secrets.SP_CLIENT_SECRET }}
+#           SP_SITE_ID: ${{ secrets.SP_SITE_ID }}
+#           SP_DRIVE_ID: ${{ secrets.SP_DRIVE_ID }}
+#           SP_FOLDER_PATH: ${{ secrets.SP_FOLDER_PATH }}
+#         run: |
+#           python CI_CD_PBIT/scripts/deploy_pbit_sharepoint.py ${{ steps.changed.outputs.files }}
